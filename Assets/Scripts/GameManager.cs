@@ -15,6 +15,7 @@ public class GameManager : MonoBehaviour
     private Node[,] NodeMatrix;
     private int startPosx, startPosy;
     private int endPosx, endPosy;
+    private List<Node> finalPath;
     void Awake()
     {
         Instance = this;
@@ -43,7 +44,7 @@ public class GameManager : MonoBehaviour
         //GameMatrix[startPosx, startPosy] = 1;
         NodeMatrix = new Node[Size, Size];
         CreateNodes();
-        PintarCamino(NodeMatrix[startPosx, startPosy], NodeMatrix[endPosx, endPosy]);
+        PaintWay(NodeMatrix[startPosx, startPosy], NodeMatrix[endPosx, endPosy]);
     }
     public void CreateNodes()
     {
@@ -119,33 +120,95 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    public void PintarCamino(Node node, Node finnode)
+    public void PaintWay(Node startNode, Node endNode)
     {
-         List<Node> nodescerrados = new List<Node>();
-        Dictionary<float, Node> nodes_abiertos = new Dictionary<float, Node>();
-        OrderedDictionary node_abiertos= new OrderedDictionary();
+        finalPath = new List<Node>();
+        List<Node> closedList = new List<Node>();
+        Dictionary<Node, float> openList = new Dictionary<Node, float>();
+        Dictionary<Node, float> gScores = new Dictionary<Node, float>();
 
-        int PosX = node.PositionX;
-        int Posy = node.PositionY;
-        Node nodeActual = node;
-        do
+        openList.Add(startNode, startNode.Heuristic);
+        gScores[startNode] = 0;
+
+        while (openList.Count > 0)
         {
-            nodescerrados.Add(nodeActual);
-            for (global::System.Int32 i = 0; i < nodeActual.WayList.Count; i++)
+            Node currentNode = openList.OrderBy(kvp => kvp.Value).First().Key;
+
+            if (currentNode.PositionX == endNode.PositionX && currentNode.PositionY == endNode.PositionY)
             {
-                Way camino = nodeActual.WayList[i];
-                Node opcion = camino.NodeDestiny;
-                float costeAcumulado= nodeActual.NodeParent.WayList.Find(p => p.NodeDestiny == nodeActual).ACUMulatedCost;
-                camino.ACUMulatedCost = camino.Cost + costeAcumulado;
-                float valor = camino.ACUMulatedCost + opcion.Heuristic;
-                nodes_abiertos[valor] = camino.NodeDestiny;
+                Debug.Log("¡Camino encontrado!");
+                ReconstructPath(currentNode);
+                StartCoroutine(VisualizePathCoroutine());
+                return;
             }
-            float llaveMinima = node_abiertos.Keys.Min();
 
-        } while (PosX != finnode.PositionX &&   Posy != finnode.PositionY);
+            openList.Remove(currentNode);
+            closedList.Add(currentNode);
 
+            foreach (Way way in currentNode.WayList)
+            {
+                Node neighbor = way.NodeDestiny;
 
+                if (closedList.Contains(neighbor))
+                    continue;
 
+                float tentativeGScore = gScores[currentNode] + way.Cost;
+
+                if (!openList.ContainsKey(neighbor))
+                {
+                    neighbor.NodeParent = currentNode;
+                    gScores[neighbor] = tentativeGScore;
+                    float fScore = tentativeGScore + neighbor.Heuristic;
+                    openList.Add(neighbor, fScore);
+                }
+                else if (tentativeGScore < gScores[neighbor])
+                {
+                    neighbor.NodeParent = currentNode;
+                    gScores[neighbor] = tentativeGScore;
+                    openList[neighbor] = tentativeGScore + neighbor.Heuristic;
+                }
+            }
+        }
+
+        Debug.Log("No se encontró camino");
+    }
+
+    private void ReconstructPath(Node endNode)
+    {
+        Node currentNode = endNode;
+        while (currentNode != null)
+        {
+            finalPath.Insert(0, currentNode);
+            currentNode = currentNode.NodeParent;
+        }
+    }
+
+    private IEnumerator VisualizePathCoroutine()
+    {
+        // Esperar 20 segundos antes de empezar a visualizar
+        yield return new WaitForSeconds(10f);
+
+        // Visualizar cada nodo del camino
+        foreach (Node node in finalPath)
+        {
+            // Encontrar el Circle en la posición del nodo
+            GameObject[] circles = GameObject.FindObjectsOfType<GameObject>()
+                .Where(obj => obj.name.Contains("Circle") &&
+                       Vector2.Distance(obj.transform.position, node.RealPosition) < 0.1f)
+                .ToArray();
+
+            if (circles.Length > 0)
+            {
+                SpriteRenderer spriteRenderer = circles[0].GetComponent<SpriteRenderer>();
+                if (spriteRenderer != null)
+                {
+                    spriteRenderer.color = Color.yellow;
+                }
+            }
+
+            // Esperar un pequeño tiempo entre cada visualización
+            yield return new WaitForSeconds(0.2f);
+        }
     }
 
 }
